@@ -137,6 +137,22 @@ def setupSerial(config, baud_rate=57600, time_out=0.1):
         tries += 1
         time.sleep(1)
 
+    if not(ser):
+        logMessage("No serial attached BrewPi found.  Trying TCP serial (WiFi)")
+        while tries < 10:
+            error = ""
+ 
+            if config['wifiHost'] is not None
+                if config['wifiPort'] is None
+                    config['wifiPort']=8080
+                ser = tcpSerial.TCPSerial(port, baudrate=baud_rate, timeout=time_out)
+                
+            if ser:
+                break
+            tries += 1
+            time.sleep(1)
+
+
     if ser:
         # discard everything in serial buffers
         ser.flushInput()
