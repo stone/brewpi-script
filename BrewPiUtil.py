@@ -19,6 +19,7 @@ import sys
 import os
 import serial
 import autoSerial
+import tcpSerial
 
 try:
     import configobj
@@ -113,6 +114,7 @@ def setupSerial(config, baud_rate=57600, time_out=0.1):
     # open serial port
     tries = 0
     logMessage("Opening serial port")
+    tries=11 # skip serial for testing wifi
     while tries < 10:
         error = ""
         for portSetting in [config['port'], config['altport']]:
@@ -138,15 +140,18 @@ def setupSerial(config, baud_rate=57600, time_out=0.1):
         time.sleep(1)
 
     if not(ser):
+        tries=0
         logMessage("No serial attached BrewPi found.  Trying TCP serial (WiFi)")
         while tries < 10:
             error = ""
  
-            if config['wifiHost'] is not None
-                if config['wifiPort'] is None
-                    config['wifiPort']=8080
-                ser = tcpSerial.TCPSerial(port, baudrate=baud_rate, timeout=time_out)
-                
+            if config['wifiHost'] == 'auto':
+                mdns=tcpSerial.MDNSBrowser()
+                (tcpHost, tcpPort)=mdns.discoverBrewpis()
+                ser = tcpSerial.TCPSerial(tcpHost,tcpPort)
+            else:
+                if not(config['wifiHost'] == None or config['wifiPort'] == None or config['wifiHost'] == 'None' or config['wifiPort'] == 'None' or config['wifiHost'] == 'none' or config['wifiPort'] == 'none'):
+                    ser = tcpSerial.TCPSerial(config['wifiHost'],int(config['wifiPort']))                    
             if ser:
                 break
             tries += 1
