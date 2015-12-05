@@ -114,7 +114,6 @@ def setupSerial(config, baud_rate=57600, time_out=0.1):
     # open serial port
     tries = 0
     logMessage("Opening serial port")
-    tries=11 # skip serial for testing wifi
     while tries < 10:
         error = ""
         for portSetting in [config['port'], config['altport']]:
