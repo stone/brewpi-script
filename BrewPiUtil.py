@@ -151,9 +151,10 @@ def setupSerial(config, baud_rate=57600, time_out=0.1):
             error = ""
  
             if config['wifiHost'] == 'auto':
-                mdns=tcpSerial.MDNSBrowser()
-                (tcpHost, tcpPort)=mdns.discoverBrewpis()
-                ser = tcpSerial.TCPSerial(tcpHost,tcpPort)
+                pass
+                # mdns=tcpSerial.MDNSBrowser()
+                # (tcpHost, tcpPort)=mdns.discoverBrewpis()
+                # ser = tcpSerial.TCPSerial(tcpHost,tcpPort)
             else:
                 if not(config['wifiHost'] == None or config['wifiPort'] == None or config['wifiHost'] == 'None' or config['wifiPort'] == 'None' or config['wifiHost'] == 'none' or config['wifiPort'] == 'none'):
                     ser = tcpSerial.TCPSerial(config['wifiHost'],int(config['wifiPort']))                    
