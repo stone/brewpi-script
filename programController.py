@@ -24,6 +24,9 @@ import expandLogMessage
 from MigrateSettings import MigrateSettings
 from sys import stderr
 import BrewPiUtil as util
+import subprocess
+import platform
+import sys
 
 # print everything in this file to stderr so it ends up in the correct log file for the web UI
 def printStdErr(*objs):
@@ -155,9 +158,9 @@ def loadBoardsFile(arduinohome):
         printStdErr("Please install it with: sudo apt-get install arduino-core")
     return boardsFileContent
 
-def programController(config, boardType, hexFile, restoreWhat):
+def programController(config, boardType, hexFile, system1File, system2File, useDfu, restoreWhat):
     programmer = SerialProgrammer.create(config, boardType)
-    return programmer.program(hexFile, restoreWhat)
+    return programmer.program(hexFile, system1File, system2File, useDfu, restoreWhat)
 
 
 def json_decode_response(line):
@@ -192,39 +195,100 @@ class SerialProgrammer:
         self.versionOld = None
         self.oldSettings = {}
 
-    def program(self, hexFile, restoreWhat):
+    def program(self, hexFile, system1File, system2File, useDfu, restoreWhat):
         printStdErr("****    %(a)s Program script started    ****" % msg_map)
 
         self.parse_restore_settings(restoreWhat)
-        if not self.open_serial(self.config, 57600, 0.2):
-            return 0
 
-        self.delay_serial_open()
+        if self.restoreSettings or self.restoreDevices:
+            printStdErr("Checking old version before programming.")
+            if not self.open_serial(self.config, 57600, 0.2):
+                return 0
+            self.delay_serial_open()
+            # request all settings from board before programming
+            if self.fetch_current_version():
+                self.retrieve_settings_from_serial()
+                self.save_settings_to_file()
 
-        # request all settings from board before programming
-        printStdErr("Checking old version before programming.")
-        if self.fetch_current_version():
-            self.retrieve_settings_from_serial()
-            self.save_settings_to_file()
+        running_as_root = False
+        try:
+            running_as_root = os.getuid() == 0
+        except AttributeError:
+            pass # not running on Linux, use serial
+        if running_as_root and self.boardType == "photon":
+            # default to DFU mode when possible on the Photon. Serial is not always stable
+            printStdErr("\nFound a Photon and running as root/sudo, using DFU mode to flash firmware.")
+            useDfu = True
 
-        if not self.flash_file(hexFile):
-            return 0
+        if useDfu:
+            printStdErr("\nTrying to automatically reboot into DFU mode and update your firmware.")
+            printStdErr("\nIf the Photon does not reboot into DFU mode automatically, please put it in DFU mode manually.")
+
+            if self.ser:
+                self.ser.close()
+
+            myDir = os.path.dirname(os.path.abspath(__file__))
+            flashDfuPath = os.path.join(myDir, 'utils', 'flashDfu.py')
+            command = sys.executable + ' ' + flashDfuPath + " --autodfu --noreset --file={0}".format(os.path.dirname(hexFile))
+            if system1File is not None and system2File is not None:
+                systemParameters = " --system1={0} --system2={1}".format(system1File, system2File)
+                command = command + systemParameters
+            if platform.system() == "Linux":
+                command =  'sudo ' + command
+            printStdErr("Running command: " + command)
+            process = subprocess.Popen(command, shell=True)
+            process.wait()
+
+            printStdErr("\nUpdating firmware over DFU finished\n")
+
+        else:
+            if not self.ser:
+                if not self.open_serial(self.config, 57600, 0.2):
+                    return 0
+            self.delay_serial_open()
+            if system1File:
+                printStdErr("Flashing system part 1.")
+                if not self.flash_file(system1File):
+                    return 0
+
+                printStdErr("Waiting for device to reset.")
+                time.sleep(15) # give time to reboot and process binary
+                if not self.open_serial_with_retry(self.config, 57600, 0.2):
+                    printStdErr("Error opening serial port after flashing system part 1. Program script will exit.")
+                    printStdErr("If your device stopped working, use flashDfu.py to restore it.")
+                    return False
+
+            if system2File:
+                printStdErr("Flashing system part 2.")
+                if not self.flash_file(system2File):
+                    return 0
+
+                printStdErr("Waiting for device to reset.")
+                time.sleep(15) # give time to reboot and process binary
+                if not self.open_serial_with_retry(self.config, 57600, 0.2):
+                    printStdErr("Error opening serial port after flashing system part 2. Program script will exit.")
+                    printStdErr("If your device stopped working, use flashDfu.py to restore it.")
+                    return False
+
+            if(hexFile):
+                if not self.flash_file(hexFile):
+                    return 0
+
+                printStdErr("Waiting for device to reset.")
+                time.sleep(15) # give time to reboot and process binary
+                if not self.open_serial_with_retry(self.config, 57600, 0.2):
+                    printStdErr("Error opening serial port after flashing user part. Program script will exit.")
+                    printStdErr("If your device stopped working, use flashDfu.py to restore it.")
+                    return False
 
         printStdErr("Waiting for device to reset.")
+        time.sleep(10) # give time to reboot
 
-        # reopen serial port
-        retries = 30
-        self.ser = None
-        while retries and not self.ser:
-            time.sleep(1)
-            self.open_serial(self.config, 57600, 0.2)
-            retries -= 1
-
-        if not self.ser:
+        if not self.open_serial_with_retry(self.config, 57600, 0.2):
             printStdErr("Error opening serial port after programming. Program script will exit. Settings are not restored.")
+            printStdErr("If your device stopped working, use flashDfu.py to restore it.")
             return False
 
-        time.sleep(1)
         self.fetch_new_version()
         self.reset_settings()
         if self.restoreSettings or self.restoreDevices:
@@ -234,7 +298,7 @@ class SerialProgrammer:
                          "\nSomething must have gone wrong. Restoring settings/devices settings failed.\n"))
             return 0
 
-        if not self.versionOld:
+        if not self.versionOld and (self.restoreSettings or self.restoreDevices):
             printStdErr("Could not receive valid version number from old board, " +
                         "No settings/devices are restored.")
             return 0
@@ -245,11 +309,6 @@ class SerialProgrammer:
 
             if(self.versionNew.isNewer("0.2")):
                 printStdErr("Sorry, settings can only be restored when updating to BrewPi 0.2.0 or higher")
-                self.restoreSettings = False
-
-        if self.restoreDevices:
-            if(self.versionNew.isNewer("0.2")):
-                printStdErr("Sorry, devices can only be restored when updating to BrewPi 0.2.0 or higher")
                 self.restoreSettings = False
 
         if self.restoreSettings:
@@ -283,11 +342,24 @@ class SerialProgrammer:
         self.restoreDevices = restoreDevices
 
     def open_serial(self, config, baud, timeout):
+        if self.ser:
+            self.ser.close()
         self.ser = None
         self.ser = util.setupSerial(config, baud, timeout)
         if self.ser is None:
             return False
         return True
+
+    def open_serial_with_retry(self, config, baud, timeout):
+        # reopen serial port
+        retries = 30
+        self.ser = None
+        while retries:
+            time.sleep(1)
+            if self.open_serial(config, baud, timeout):
+                return True
+            retries -= 1
+        return False
 
     def delay_serial_open(self):
         pass
@@ -410,7 +482,7 @@ class SerialProgrammer:
             self.ser.write(command)
             # make readline blocking for max 5 seconds to give the controller time to respond after every setting
             oldTimeout = self.ser.timeout
-            self.ser.setTimeout(5)
+            self.ser.timeout = 5
             # read all replies
             while 1:
                 line = self.ser.readline()
@@ -419,7 +491,7 @@ class SerialProgrammer:
                         self.print_debug_log(line)
                 if self.ser.inWaiting() == 0:
                     break
-            self.ser.setTimeout(oldTimeout)
+            self.ser.timeout = 5
 
     def restore_devices(self):
         ser = self.ser
@@ -471,6 +543,7 @@ class SerialProgrammer:
 class SparkProgrammer(SerialProgrammer):
     def __init__(self, config, boardType):
         SerialProgrammer.__init__(self, config)
+        self.boardType = boardType
 
     def flash_file(self, hexFile):
         self.ser.write('F')
@@ -493,9 +566,12 @@ class ArduinoProgrammer(SerialProgrammer):
         self.boardType = boardType
 
     def delay_serial_open(self):
-        time.sleep(5)  # give the arduino some time to reboot in case of an Arduino UNO
+        if self.boardType == "uno":
+            time.sleep(5)  # give the arduino some time to reboot in case of an Arduino UNO
 
     def reset_leonardo(self):
+        if self.ser:
+            self.ser.close()
         del self.ser
         self.ser = None
         if self.open_serial(self.config, 1200, None):
@@ -559,11 +635,9 @@ class ArduinoProgrammer(SerialProgrammer):
 
         time.sleep(1)
         # Get serial port while in bootloader
-        if self.open_serial(config, boardSettings['upload.speed'], 0.1):
-            bootLoaderPort = self.ser.name
-            self.ser.close()
-        else:
-            printStdErr("ERROR: could not open serial port in bootloader")
+        bootLoaderPort = util.findSerialPort(bootLoader=True)
+        if not bootLoaderPort:
+            printStdErr("ERROR: could not find port in bootloader")
 
         programCommand = (avrdudehome + 'avrdude' +
                           ' -F ' +  # override device signature check
@@ -593,13 +667,4 @@ class ArduinoProgrammer(SerialProgrammer):
         printStdErr("Giving the Arduino a few seconds to power up...")
         self.delay(6)
         return True
-
-def test_program_spark_core():
-    file = "R:\\dev\\brewpi\\firmware\\platform\\spark\\target\\brewpi.bin"
-    config = { "port" : "COM22" }
-    result = programController(config, "core", file, { "settings":True, "devices":True})
-    printStdErr("Result is "+str(result))
-
-if __name__ == '__main__':
-    test_program_spark_core()
 

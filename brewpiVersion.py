@@ -26,7 +26,10 @@ def getVersionFromSerial(ser):
     retries = 0
     oldTimeOut = ser.timeout
     startTime = time.time()
-    ser.setTimeout(1)
+    if not ser.isOpen():
+        print "Cannot get version from serial port that is not open."
+
+    ser.timeout = 1
     ser.write('n')  # request version info
     while retries < 10:
         retry = True
@@ -42,8 +45,9 @@ def getVersionFromSerial(ser):
                 if line[0] == 'N':
                     data = line.strip('\n')[2:]
                     version = AvrInfo(data)
-                    retry = False
-                    break
+                    if version and version.version != "0.0.0":
+                        retry = False
+                        break
             if time.time() - loopTime >= ser.timeout:
                 # have read entire buffer, now just reading data as it comes in. Break to prevent an endless loop.
                 break
@@ -58,7 +62,7 @@ def getVersionFromSerial(ser):
             retries += 1
         else:
             break
-    ser.setTimeout(oldTimeOut) # restore previous serial timeout value
+    ser.timeout = oldTimeOut # restore previous serial timeout value
     return version
 
 
@@ -191,6 +195,9 @@ class AvrInfo:
 
     def isNewer(self, versionString):
         return self.version < LooseVersion(versionString)
+
+    def isEqual(self, versionString):
+        return self.version == LooseVersion(versionString)
 
     def familyName(self):
         family = AvrInfo.families.get(self.board)

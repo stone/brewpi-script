@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with BrewPi.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import print_function
 import time
 import sys
 import os
@@ -24,7 +25,7 @@ import tcpSerial
 try:
     import configobj
 except ImportError:
-    print "BrewPi requires ConfigObj to run, please install it with 'sudo apt-get install python-configobj"
+    print("BrewPi requires ConfigObj to run, please install it with 'sudo apt-get install python-configobj")
     sys.exit(1)
 
 
@@ -80,12 +81,14 @@ def configSet(configFile, settingName, value):
                    "To fix this, run 'sudo sh /home/brewpi/fixPermissions.sh'")
     return readCfgWithDefaults(configFile)  # return updated ConfigObj
 
+def printStdErr(*objs):
+    print("", *objs, file=sys.stderr)
 
 def logMessage(message):
     """
     Prints a timestamped message to stderr
     """
-    print >> sys.stderr, time.strftime("%b %d %Y %H:%M:%S   ") + message
+    printStdErr(time.strftime("%b %d %Y %H:%M:%S   ") + message)
 
 
 def scriptPath():
@@ -100,10 +103,13 @@ def removeDontRunFile(path='/var/www/do_not_run_brewpi'):
     if os.path.isfile(path):
         os.remove(path)
         if not sys.platform.startswith('win'):  # cron not available
-            print "BrewPi script will restart automatically."
+            print("BrewPi script will restart automatically.")
     else:
-        print "File do_not_run_brewpi does not exist at " + path
+        print("File do_not_run_brewpi does not exist at " + path)
 
+def findSerialPort(bootLoader):
+    (port, name) = autoSerial.detect_port(bootLoader)
+    return port
 
 def setupSerial(config, baud_rate=57600, time_out=0.1):
     ser = None
@@ -120,14 +126,14 @@ def setupSerial(config, baud_rate=57600, time_out=0.1):
             if portSetting == None or portSetting == 'None' or portSetting == "none":
                 continue  # skip None setting
             if portSetting == "auto":
-                port, devicetype = autoSerial.detect_port()
+                port = findSerialPort(bootLoader=False)
                 if not port:
                     error = "Could not find compatible serial devices \n"
                     continue # continue with altport
             else:
                 port = portSetting
             try:
-                ser = serial.Serial(port, baudrate=baud_rate, timeout=time_out)
+                ser = serial.Serial(port, baudrate=baud_rate, timeout=time_out, write_timeout=0)
                 if ser:
                     break
             except (IOError, OSError, serial.SerialException) as e:
