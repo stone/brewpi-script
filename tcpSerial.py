@@ -116,7 +116,12 @@ class TCPSerial(object):
     def close(self):
         #close port immediately
         return self.sock.close()
-    
+
+    def isOpen(self):
+        if self.sock:
+            return True
+        else:
+            return False
     
 # class MDNSBrowser(object):
 #
