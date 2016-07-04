@@ -88,23 +88,28 @@ class AvrInfo:
     board_mega = "mega"
     board_spark_core = "core"
     board_photon = "photon"
+    board_esp = "esp8266"
 
-    boards = {'l': board_leonardo, 's': board_standard, 'm': board_mega, 'x': board_spark_core, 'y': board_photon}
+    boards = {'l': board_leonardo, 's': board_standard, 'm': board_mega, 'x': board_spark_core, 'y': board_photon,
+              'e': board_esp}
 
     family_arduino = "Arduino"
     family_spark = "Particle"
+    family_esp = "ESP"
 
     families = { board_leonardo: family_arduino,
                 board_standard: family_arduino,
                 board_mega: family_arduino,
                 board_spark_core: family_spark,
-                board_photon: family_spark}
+                board_photon: family_spark,
+                board_esp: family_esp}
 
     board_names = { board_leonardo: "Leonardo",
                 board_standard: "Uno",
                 board_mega: "Mega",
                 board_spark_core: "Core",
-                board_photon: "Photon"}
+                board_photon: "Photon",
+                board_esp: "ESP8266"}
 
     def __init__(self, s=None):
         self.version = LooseVersion("0.0.0")
