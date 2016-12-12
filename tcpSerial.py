@@ -122,7 +122,10 @@ class TCPSerial(object):
             return True
         else:
             return False
-    
+
+    def open(self):
+        self.sock.connect((self.host, self.port))
+
 # class MDNSBrowser(object):
 #
 #     def __init__(self):
