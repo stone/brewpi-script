@@ -72,7 +72,6 @@ class BackGroundSerial():
             sys.exit("Terminating due to fatal serial error")
 
     def __listenThread(self):
-        lastReceive = time.time()
         while self.run:
             in_waiting = None
             new_data = None
@@ -81,7 +80,6 @@ class BackGroundSerial():
                     in_waiting = self.ser.inWaiting()
                     if in_waiting > 0:
                         new_data = self.ser.read(in_waiting)
-                        lastReceive = time.time()
                 except (IOError, OSError, SerialException) as e:
                     logMessage('Serial Error: {0})'.format(str(e)))
                     self.error = True
