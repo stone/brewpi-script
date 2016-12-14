@@ -123,4 +123,3 @@ class TCPSerial(object):
     def open(self):
         mdnsLocator.locate_brewpi_services()  # This causes all the BrewPi devices to resend their mDNS info
         self.sock.connect((self.host, self.port))
-
