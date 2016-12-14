@@ -73,7 +73,7 @@ class BackGroundSerial():
 
     def __listenThread(self):
         lastReceive = time.time()
-        while self.run :
+        while self.run:
             in_waiting = None
             new_data = None
             if not self.error:
