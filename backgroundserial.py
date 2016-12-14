@@ -135,7 +135,6 @@ class BackGroundSerial():
 if __name__ == '__main__':
     # some test code that requests data from serial and processes the response json
     import simplejson
-    import time
     import BrewPiUtil as util
 
     config_file = util.addSlash(sys.path[0]) + 'settings/config.cfg'
