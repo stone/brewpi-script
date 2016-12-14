@@ -2,9 +2,7 @@
 # this allows seemless integration with exsiting brewpi-script code
 import BrewPiUtil
 import socket
-# import dbus, gobject, avahi
-# from dbus import DBusException
-# from dbus.mainloop.glib import DBusGMainLoop
+import mdnsLocator
 
 
 class TCPSerial(object):
@@ -16,7 +14,7 @@ class TCPSerial(object):
         self.retries=10 # max reconnect attempts to try when doing a read or write operation
         self.retryCount=0 # count of reconnect attempts performed
         BrewPiUtil.logMessage("Connecting to BrewPi " + host + " on port " + str(port))
-        self.sock.connect((host, port))
+        self.open()
         self.timeout=self.sock.gettimeout()
         self.name=host + ':' + str(port) 
         return      
@@ -43,7 +41,7 @@ class TCPSerial(object):
             if self.retryCount < self.retries:
                 self.retryCount=self.retryCount+1
                 self.sock.close()
-                self.sock.connect((self.host, self.port))
+                self.open()
                 bytes=self.read(size)
             else:
                 self.sock.close()
@@ -76,7 +74,7 @@ class TCPSerial(object):
             if self.retryCount < self.retries:
                 self.retryCount=self.retryCount+1
                 self.sock.close()
-                self.sock.connect((self.host, self.port))
+                self.open()
                 bytes=self.write(data)
             else:
                 self.sock.close()
@@ -85,7 +83,7 @@ class TCPSerial(object):
             if self.retryCount < self.retries:
                 self.retryCount=self.retryCount+1
                 self.sock.close()
-                self.sock.connect((self.host, self.port))
+                self.open()
                 bytes=self.write(data)
             else:
                 self.sock.close()
@@ -99,8 +97,7 @@ class TCPSerial(object):
         # Note: the value returned by inWaiting should be greater than the send buffer size on BrewPi firmware
         # If not, brewpi.py may not grab the next whole buffered message.
         return 4096  #tcp socket doesnt give us a way to know how much is in the buffer, so we assume there is always something
-    
-        
+
     def setTimeout(self, value=0.1):
         if value:
             self.sock.settimeout(value)
@@ -124,54 +121,6 @@ class TCPSerial(object):
             return False
 
     def open(self):
+        mdnsLocator.locate_brewpi_services()  # This causes all the BrewPi devices to resend their mDNS info
         self.sock.connect((self.host, self.port))
 
-# class MDNSBrowser(object):
-#
-#     def __init__(self):
-#         # Avahi global configs
-#         self.Avahi_loop = DBusGMainLoop(set_as_default=True)
-#         self.Avahi_busloop = gobject.MainLoop()
-#         gobject.threads_init()
-#         self.Avahi_bus = dbus.SystemBus(mainloop=self.Avahi_loop)
-#         self.Avahi_server = dbus.Interface( self.Avahi_bus.get_object(avahi.DBUS_NAME, '/'), 'org.freedesktop.Avahi.Server')
-#         self.Avahi_TYPE = '_brewpi._tcp'
-#         self.tcpHost=None
-#         self.tcpPort=None
-#
-#     def _service_resolved(self,*args):
-#         #global tcpHost
-#         #global tcpPort
-#         BrewPiUtil.logMessage('\taddress:' + args[7])
-#         BrewPiUtil.logMessage( '\tport:' + str(args[8]))
-#         self.tcpHost=args[7]
-#         self.tcpPort=args[8]
-#         self.Avahi_busloop.quit()
-#
-#     def _print_error(self,*args):
-#         BrewPiUtil.logMessage('error_handler:' + args[0])
-#         self.Avahi_busloop.quit()
-#
-#     def _myhandler(self,interface, protocol, name, stype, domain, flags):
-#         BrewPiUtil.logMessage("Found BrewPi service '" + name +"' type '" +stype+"' domain '"+domain+"' ") #% (name, stype, domain)
-#
-#         if flags & avahi.LOOKUP_RESULT_LOCAL:
-#                 # local service, skip
-#                 pass
-#
-#         self.Avahi_server.ResolveService(interface, protocol, name, stype,
-#             domain, avahi.PROTO_UNSPEC, dbus.UInt32(0),
-#             reply_handler=self._service_resolved, error_handler=self._print_error)
-#
-#
-#     def discoverBrewpis(self):
-#         BrewPiUtil.logMessage("Running discovery...")
-#         sbrowser = dbus.Interface(self.Avahi_bus.get_object(avahi.DBUS_NAME,
-#                                   self.Avahi_server.ServiceBrowserNew(avahi.IF_UNSPEC,
-#                                   avahi.PROTO_UNSPEC, self.Avahi_TYPE, 'local', dbus.UInt32(0))),
-#                                   avahi.DBUS_INTERFACE_SERVICE_BROWSER)
-#
-#         sbrowser.connect_to_signal("ItemNew", self._myhandler)
-#         self.Avahi_busloop.run()
-#         return (self.tcpHost,self.tcpPort)
-#
